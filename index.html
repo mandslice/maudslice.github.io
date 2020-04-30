@@ -152,27 +152,77 @@
           <div id="js-content" class="content-ll">
             
   
-    <article id="post-wrsnmd" class="article article-type-post  article-index" itemscope itemprop="blogPost">
+    <article id="post-今日学习复盘" class="article article-type-post  article-index" itemscope itemprop="blogPost">
   <div class="article-inner">
     
       <header class="article-header">
         
   
     <h1 itemprop="name">
-      <a class="article-title" href="/2020/04/30/wrsnmd/">wrsnmd</a>
+      <a class="article-title" href="/2020/04/29/%E4%BB%8A%E6%97%A5%E5%AD%A6%E4%B9%A0%E5%A4%8D%E7%9B%98/">今日学习复盘01</a>
     </h1>
   
 
         
-        <a href="/2020/04/30/wrsnmd/" class="archive-article-date">
-  	<time datetime="2020-04-30T00:36:43.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2020-04-30</time>
+        <a href="/2020/04/29/%E4%BB%8A%E6%97%A5%E5%AD%A6%E4%B9%A0%E5%A4%8D%E7%9B%98/" class="archive-article-date">
+  	<time datetime="2020-04-29T11:28:21.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2020-04-29</time>
 </a>
         
       </header>
     
     <div class="article-entry" itemprop="articleBody">
       
-        
+        <h1 id="flume"><a href="#flume" class="headerlink" title="flume"></a>flume</h1><h2 id="ChannelSelector"><a href="#ChannelSelector" class="headerlink" title="ChannelSelector"></a>ChannelSelector</h2><pre><code>选出Event将要被发往哪一个channel</code></pre><h3 id="ReplicatingSelector"><a href="#ReplicatingSelector" class="headerlink" title="ReplicatingSelector"></a>ReplicatingSelector</h3><pre><code>副本选择器：将同一个Event发往所有的channel
+使用示例：
+a1.sources = r1
+a1.channels = c1 c2 c3
+a1.sources.r1.selector.type = replicating
+a1.sources.r1.channels = c1 c2 c3
+a1.sources.r1.selector.optional = c3
+
+在上述配置中，c3是可选通道。 写入c3的失败将被忽略。 由于c1和c2没有标记为可选，因此无法写入这些通道将导致事务失败。</code></pre><h3 id="Multiplexing"><a href="#Multiplexing" class="headerlink" title="Multiplexing"></a>Multiplexing</h3><pre><code>多路复用选择器：更具相应的原则，将不同的Event发往不同的channel
+使用示例：
+a1.sources = r1
+a1.channels = c1 c2 c3 c4
+a1.sources.r1.selector.type = multiplexing
+a1.sources.r1.selector.header = state
+a1.sources.r1.selector.mapping.CZ = c1
+a1.sources.r1.selector.mapping.US = c2 c3
+a1.sources.r1.selector.default = c4
+
+header的值和mapping的值均可以自定义，放在下文详细说明</code></pre><h2 id="SinkProcessor"><a href="#SinkProcessor" class="headerlink" title="SinkProcessor"></a>SinkProcessor</h2><h3 id="DefaultSinkProcessor"><a href="#DefaultSinkProcessor" class="headerlink" title="DefaultSinkProcessor"></a>DefaultSinkProcessor</h3><pre><code>默认的SinkProcessor,只对应单个sink</code></pre><h3 id="FailoverSinkProcessor"><a href="#FailoverSinkProcessor" class="headerlink" title="FailoverSinkProcessor"></a>FailoverSinkProcessor</h3><pre><code>可以实现故障转移功能的SinkProcessor
+使用示例：
+a1.sinkgroups = g1
+a1.sinkgroups.g1.sinks = k1 k2
+a1.sinkgroups.g1.processor.type = failover
+a1.sinkgroups.g1.processor.priority.k1 = 5
+a1.sinkgroups.g1.processor.priority.k2 = 10
+a1.sinkgroups.g1.processor.maxpenalty = 10000</code></pre><p><strong>故障转移接收器处理器维护接收器的优先级列表，以确保只要一个可用的事件都将被处理（交付）。<br>故障转移机制的工作原理是将失败的接收器委派给一个池，在该池中为其分配一个冷却期，并在重试之前随着顺序出现的故障而增加。 接收器成功发送事件后，它将还原到活动池。 接收器具有与之关联的优先级，数量越大，优先级越高。 如果在发送事件时接收器失败，则下一个尝试具有最高优先级的接收器发送事件。 例如，优先级为100的接收器先于优先级为80的接收器被激活。如果未指定优先级，则根据配置中指定接收器的顺序确定优先级。<br>要进行配置，请将sink groups processor设置为failover，并为所有单个接收器设置优先级。 所有指定的优先级必须唯一。 此外，可以使用maxpenalty属性设置故障转移时间的上限（以毫秒为单位）。</strong></p>
+<h3 id="LoadBalancingSinkProcessor"><a href="#LoadBalancingSinkProcessor" class="headerlink" title="LoadBalancingSinkProcessor"></a>LoadBalancingSinkProcessor</h3><pre><code>可以实现负载均衡的SinkProcessor
+有三种方式来实现负载均衡：
+
+1. round_robin，轮询的方式，将sink以轮流的方式逐一发送
+2. random，随机的方式，将sink随机发送到后面的agent中
+3. FQCN，用户自定义的方式，需要实现AbstractSinkSelector，放在后面详细介绍</code></pre><h2 id="自定义拦截器"><a href="#自定义拦截器" class="headerlink" title="自定义拦截器"></a>自定义拦截器</h2><pre><code>实现实现 Interceptor 接口
+重写其中的 initialize() ，intercept(Event event) （单行数据的拦截逻辑），intercept(List&lt;Event&gt; events) (多行数据的拦截逻辑),close() 方法。
+需要注意的是，不能忘记写用来初始化拦截器对象的静态内部类Builder（名字可自定义）.
+
+配合Multiplexing一起使用。</code></pre><h2 id="自定义source"><a href="#自定义source" class="headerlink" title="自定义source"></a>自定义source</h2><pre><code>继承 AbstractSource 类并实现 Configurable 和 PollableSource 接口。 
+实现相应方法：
+
+1.getBackOffSleepIncrement()
+2.getMaxBackOffSleepInterval()
+3.configure(Context context)//初始化 context（读取配置文件内容） 
+4.process()//获取数据封装成 event 并写入 channel，这个方法将被循环调用。 
+使用场景：读取mysql数据或其他文件系统。 
+
+使用示例：
+a1.sources = r1
+a1.channels = c1
+a1.sources.r1.type = org.example.MySource
+a1.sources.r1.channels = c1
+
+启动flume时需要将相关jar包放到flume/lib文件夹下</code></pre>
       
 
       
@@ -180,11 +230,22 @@
     <div class="article-info article-info-index">
       
       
+	<div class="article-tag tagcloud">
+		<i class="icon-price-tags icon"></i>
+		<ul class="article-tag-list">
+			 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">复习与总结</a>
+        		</li>
+      		
+		</ul>
+	</div>
+
       
 
       
         <p class="article-more-link">
-          <a class="article-more-a" href="/2020/04/30/wrsnmd/">展开全文 >></a>
+          <a class="article-more-a" href="/2020/04/29/%E4%BB%8A%E6%97%A5%E5%AD%A6%E4%B9%A0%E5%A4%8D%E7%9B%98/">展开全文 >></a>
         </p>
       
 
@@ -504,6 +565,10 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
             <input type="checkbox" q-on="click:toggleTag(e)" q-attr="checked:showTags">
           </label>
           <ul class="article-tag-list" q-show="showTags">
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color1">复习与总结</a>
+              </li>
             
             <div class="clearfix"></div>
           </ul>
